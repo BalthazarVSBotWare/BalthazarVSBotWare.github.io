@@ -27,7 +27,7 @@
     ::selection{background:var(--red);color:var(--black)}
     a{color:var(--red);text-decoration:none;transition:opacity 0.2s var(--ease)}a:hover{opacity:0.7}
     .container{max-width:var(--max-width);margin:0 auto;padding:0 var(--space-lg)}
-    section{padding:var(--space-2xl) 0}
+    section{padding:var(--space-2xl) 0;position:relative}
     nav{position:fixed;top:0;left:0;right:0;z-index:100;background:rgba(10,10,10,0.85);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-bottom:1px solid var(--gray);padding:var(--space-md) 0}
     nav .container{display:flex;justify-content:space-between;align-items:center}
     .nav-logo-group{display:flex;align-items:center;gap:var(--space-sm)}
@@ -36,6 +36,19 @@
     .admin-login-link:hover{color:var(--white-dim)}
     .admin-logout-link{display:none;cursor:pointer;color:var(--red-dim);transition:color 0.2s var(--ease);align-items:center;line-height:1}
     .admin-logout-link:hover{color:var(--red)}
+
+    /* 
+      ============================================================
+      BLUR MODE TOGGLE — nav eye icon
+      ============================================================
+      Only visible when logged in. Click to enter blur mode where
+      per-section visibility toggles appear.
+    */
+    .blur-mode-toggle{display:none;cursor:pointer;color:var(--gray-light);transition:color 0.2s var(--ease);align-items:center;line-height:1}
+    .blur-mode-toggle:hover{color:var(--white-dim)}
+    .blur-mode-toggle.active{color:var(--red)}
+    .blur-mode-toggle.active:hover{opacity:0.8}
+
     .nav-links{display:flex;gap:var(--space-lg);list-style:none}
     .nav-links a{font-size:0.75rem;color:var(--white-dim);letter-spacing:1.5px;text-transform:uppercase;transition:color 0.2s var(--ease)}
     .nav-links a:hover,.nav-links a.active{color:var(--red);opacity:1}
@@ -154,6 +167,65 @@
     .toast{position:fixed;bottom:var(--space-lg);left:50%;transform:translateX(-50%) translateY(20px);background:var(--black-card);border:1px solid var(--red-dim);color:var(--white);font-family:var(--font-heading);font-size:0.75rem;letter-spacing:1px;padding:var(--space-sm) var(--space-lg);z-index:300;opacity:0;transition:all 0.3s var(--ease);pointer-events:none}
     .toast.visible{opacity:1;transform:translateX(-50%) translateY(0)}
     .section-loading{text-align:center;padding:var(--space-xl) 0;color:var(--white-dim);font-size:0.85rem}
+
+    /* 
+      ============================================================
+      SECTION BLUR / PRIVACY SYSTEM
+      ============================================================
+      Lets you selectively hide sections from public visitors.
+      
+      How it works:
+      - Log in → eye icon appears next to the power icon
+      - Click eye → "blur mode" activates, each section gets a toggle
+      - Click a section's toggle → it flips between visible/hidden
+      - State saves to Supabase immediately
+      - Public visitors see frosted blur + "content hidden" message
+      - You always see content clearly with a red border indicator
+      
+      No new tables needed — uses existing site_settings table.
+      Key: "blurred_sections"  Value: JSON array like ["dashboard","journal"]
+    */
+
+    /* Per-section blur toggle button — floats in top-right of each section */
+    .section-blur-toggle{
+      display:none;position:absolute;top:var(--space-lg);right:var(--space-lg);
+      cursor:pointer;z-index:10;background:var(--black-card);border:1px solid var(--gray);
+      color:var(--white-dim);padding:6px 10px;font-family:var(--font-heading);
+      font-size:0.6rem;letter-spacing:1px;text-transform:uppercase;
+      transition:all 0.2s var(--ease);align-items:center;gap:6px;
+    }
+    .section-blur-toggle:hover{border-color:var(--red-dim);color:var(--white)}
+    .section-blur-toggle.is-hidden{border-color:var(--red-dim);color:var(--red);background:rgba(153,17,17,0.15)}
+
+    /* 
+      PUBLIC BLUR — what visitors see when a section is hidden.
+      Frosted glass effect over the container, "content hidden" overlay text.
+      Content stays in DOM but is unreadable and unclickable.
+    */
+    .section-blurred>.container{
+      filter:blur(8px);user-select:none;pointer-events:none;
+      transition:filter 0.4s var(--ease);
+    }
+    .section-blurred::after{
+      content:'this section is currently hidden';position:absolute;
+      top:50%;left:50%;transform:translate(-50%,-50%);
+      font-family:var(--font-heading);font-size:0.75rem;letter-spacing:2px;
+      text-transform:uppercase;color:var(--gray-light);pointer-events:none;z-index:5;
+    }
+
+    /* 
+      ADMIN INDICATOR — what YOU see when a section is hidden.
+      No blur, just red side borders and a small "hidden from public" label
+      so you always know what the public can't see.
+    */
+    .section-blurred-admin{border-left:3px solid var(--red-dim);border-right:3px solid var(--red-dim)}
+    .section-blurred-admin::before{
+      content:'hidden from public';position:absolute;top:var(--space-md);left:50%;
+      transform:translateX(-50%);font-family:var(--font-heading);font-size:0.6rem;
+      letter-spacing:2px;text-transform:uppercase;color:var(--red-dim);
+      background:var(--black);padding:2px 12px;border:1px solid var(--red-dim);z-index:10;
+    }
+
     footer{border-top:1px solid var(--gray);padding:var(--space-xl) 0;text-align:center}
     footer p{font-size:0.75rem;color:var(--gray-light)}
     footer .footer-character{margin-bottom:var(--space-md);opacity:0.3}
@@ -169,15 +241,25 @@
       section{padding:var(--space-xl) 0}
       .admin-toolbar{flex-direction:column;align-items:flex-start}
       .entry-controls{flex-direction:column;align-items:flex-start}
+      .section-blur-toggle{top:var(--space-sm);right:var(--space-sm);font-size:0.55rem;padding:4px 8px}
     }
   </style>
 </head>
 <body>
+  <!-- 
+    ============================================================
+    NAV
+    ============================================================
+    Icons next to logo (left to right):
+    1. Power icon — login (gray) / logout (red)
+    2. Eye icon — blur mode toggle (only visible when logged in)
+  -->
   <nav><div class="container">
     <div class="nav-logo-group">
       <a href="#" class="nav-logo">Malys</a>
       <span class="admin-login-link" id="adminLoginLink" onclick="openLogin()" title="Admin login"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg></span>
       <span class="admin-logout-link" id="adminLogoutLink" onclick="handleLogout()" title="Logout"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg></span>
+      <span class="blur-mode-toggle" id="blurModeToggle" onclick="toggleBlurMode()" title="Toggle section visibility"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></span>
     </div>
     <button class="nav-toggle" onclick="document.querySelector('.nav-links').classList.toggle('open')" aria-label="Toggle navigation"><span></span><span></span><span></span></button>
     <ul class="nav-links">
@@ -254,7 +336,7 @@
 
   <div class="modal-overlay" id="tileEditorModal"><div class="modal"><h3 id="tileEditorTitle">New Tile</h3><div class="error-msg" id="tileEditorError"></div><label>Title</label><input type="text" id="tileTitle" placeholder="tile title"><label>Content</label><div class="quill-wrap quill-wrap-short" id="tileEditorWrap"><div id="tileEditorQuill"></div></div><div class="modal-actions"><button class="btn" onclick="closeModal('tileEditorModal')">Cancel</button><button class="btn btn-primary" id="tileEditorSaveBtn" onclick="saveTile()">Save Draft</button></div></div></div>
 
-  <div class="modal-overlay" id="projectEditorModal"><div class="modal"><h3 id="projectEditorTitle">New Project</h3><div class="error-msg" id="projectEditorError"></div><label>Title</label><input type="text" id="projectTitle" placeholder="project name"><label>Tags (comma-separated)</label><input type="text" id="projectTags" placeholder="Python, Web UI, i3wm"><label>Description</label><textarea id="projectDesc" placeholder="what this project does..."></textarea><label>Link URL</label><input type="text" id="projectUrl" placeholder="https://github.com/..."><label>Link Text</label><input type="text" id="projectLinkText" placeholder="view on github \u2192"><div class="modal-actions"><button class="btn" onclick="closeModal('projectEditorModal')">Cancel</button><button class="btn btn-primary" id="projectEditorSaveBtn" onclick="saveProject()">Save</button></div></div></div>
+  <div class="modal-overlay" id="projectEditorModal"><div class="modal"><h3 id="projectEditorTitle">New Project</h3><div class="error-msg" id="projectEditorError"></div><label>Title</label><input type="text" id="projectTitle" placeholder="project name"><label>Tags (comma-separated)</label><input type="text" id="projectTags" placeholder="Python, Web UI, i3wm"><label>Description</label><textarea id="projectDesc" placeholder="what this project does..."></textarea><label>Link URL</label><input type="text" id="projectUrl" placeholder="https://github.com/..."><label>Link Text</label><input type="text" id="projectLinkText" placeholder="view on github →"><div class="modal-actions"><button class="btn" onclick="closeModal('projectEditorModal')">Cancel</button><button class="btn btn-primary" id="projectEditorSaveBtn" onclick="saveProject()">Save</button></div></div></div>
 
   <div class="modal-overlay" id="entryEditorModal"><div class="modal"><h3 id="entryEditorTitle">New Entry</h3><div class="error-msg" id="entryEditorError"></div><label>Title</label><input type="text" id="entryTitle" placeholder="entry title"><label>Date</label><input type="text" id="entryDate" placeholder="March 14, 2026"><label>Content</label><div class="quill-wrap"><div id="entryEditorQuill"></div></div><div class="modal-actions"><button class="btn" onclick="closeModal('entryEditorModal')">Cancel</button><button class="btn btn-primary" id="entryEditorSaveBtn" onclick="saveEntry()">Save Draft</button></div></div></div>
 
@@ -274,6 +356,19 @@
 
     let currentUser=null,editingId=null,editingType=null;
     const SITE_URL='https://malys-botware.github.io';
+
+    /* 
+      ============================================================
+      BLUR / PRIVACY STATE
+      ============================================================
+      blurredSections  — Set of section IDs hidden from the public.
+                         Persisted in site_settings as "blurred_sections".
+      blurModeActive   — true when admin has the per-section toggles open.
+      BLURRABLE_SECTIONS — which sections can be blurred (hero excluded).
+    */
+    let blurredSections = new Set();
+    let blurModeActive = false;
+    const BLURRABLE_SECTIONS = ['about', 'dashboard', 'projects', 'journal', 'connect'];
 
     /* QUILL EDITORS */
     const qCfg={theme:'snow',modules:{toolbar:[[{header:[1,2,3,false]}],['bold','italic','underline','strike'],[{list:'ordered'},{list:'bullet'}],['blockquote','code-block'],['link'],['clean']]}};
@@ -300,35 +395,11 @@
 
     /* STATIC FALLBACKS */
     const S_SETTINGS={hero_name:'malys',hero_tagline:'learning to code a dozen rabbitholes at a time, tinkering with linux, building things, breaking things, learning as much as possible, and trying to enjoy the process without burning out.',hero_status:'doin stuff/researching',about_intro:'I went from being a casual windows consumer to installing linux on a dusty alienware laptop and falling into the deepest rabbithole of my life. One month in and I\'ve already shipped my first repo, broken my system more times than I can count, and realized that writing things out is maybe a little therapeutic.\n\nSome of the 37signals really resonate with me such as the idea that you can build something real without burning yourself to the ground. That simplicity isn\'t laziness, it\'s discipline. That you don\'t need permission to start, you just need to start.',footer_line1:'built by thought, one prompt or line at a time.',footer_line2:'keep on keepin\' on.'};
-    const S_BELIEFS=[
-      {id:'sb1',title:'learn by building, not just consuming',content:'Grinding through lessons has its place, but the real learning happens when you make something, break it, and figure out why. My first repo is small and kinda rough but it taught me more than any tutorial.',sort_order:1},
-      {id:'sb2',title:'ship it, even if it\'s embarrassing',content:'Perfectionism is the enemy. Put it out there. You can\'t get feedback on code that lives only on your machine. The act of making something public changes how you think about it.',sort_order:2},
-      {id:'sb3',title:'slow down to go faster',content:'The can\'t-stop-won\'t-stop mindset is fun until you crash. Sustainable pace beats heroic sprints. 37signals runs on 40-hour weeks and they\'ve been profitable for 25 years. There\'s something to that.',sort_order:3},
-      {id:'sb4',title:'own your space',content:'This site exists because a reddit post got deleted before anyone could see it. That\'s fine. But it\'s a reminder: if you want a voice that can\'t be moderated away, you need your own corner of the internet.',sort_order:4},
-      {id:'sb5',title:'ai is a tool, not a crutch',content:'I use AI. I\'m not going to pretend I don\'t. But the goal is to understand what the code does, not just to generate it. The basics matter. You can\'t debug what you don\'t understand.',sort_order:5},
-      {id:'sb6',title:'keep going, keep writing',content:'Writing things out organizes thoughts better than any productivity system. This whole site started because I realized journaling helps me process what I\'m learning. So here we are.',sort_order:6},
-      {id:'sb7',title:'sleep on it. seriously. just do it.',content:'instant gratification is great and all but isn\'t gonna be sustainable, start planning a little more thoroughly, don\'t get stagnant though.',sort_order:7}
-    ];
-    const S_TILES=[
-      {id:'st1',title:'System',content:'<p>D.E.\'s: Cosmic and i3 till im happy with the i3 config things to fix in i3:</p><p>- some apps not working properly or as expected</p><p>ex. - mission control opens to blank/translucent window</p><p>- garuda toolbox can\'t run certain diags or sys update</p><p>general: lockscreen needs theme still</p>',published:true,sort_order:1},
-      {id:'st2',title:'Lessons',content:'<p>- Onward from ch3 at last! got to ch5 l2</p>',published:true,sort_order:2},
-      {id:'st3',title:'This Site',content:'<p>- tweak "hero"</p>',published:true,sort_order:3},
-      {id:'st4',title:'Keybindings Cheatsheet / Editor',content:'<p>undecided where i want to go with it rn, seems to be functioning as expected.</p><p>gonna try to learn how exactly it works before going too much farther.</p>',published:true,sort_order:4}
-    ];
-    const S_PROJECTS=[
-      {id:'sp1',title:'i3 Keybinding Cheatsheet & Editor',tags:'Python, Web UI, i3wm',description:'My first repo. Parses an i3 config file and serves a local web UI for viewing and editing keybindings. Nothing huge, almost kinda embarrassing, but it felt good to put something real out on the internet. And I learned a ton building it.',link_url:'https://github.com/Malys-Botware/i3-keybindings-cheatsheet',link_text:'view on github \u2192',sort_order:1},
-      {id:'sp2',title:'This Website',tags:'HTML, CSS, JS, Supabase',description:'A single-file personal site built to be readable, learnable, and easy to modify. No frameworks. No build steps. Just a text editor and a browser. An ongoing project to learn web development while having something to show for it.',link_url:'https://github.com/Malys-Botware/Malys-Botware.github.io',link_text:'view source \u2192',sort_order:2}
-    ];
-    const S_SOCIALS=[
-      {id:'ss1',name:'GitHub',handle:'Malys-Botware',url:'https://github.com/Malys-Botware',icon_key:'github',sort_order:1},
-      {id:'ss2',name:'X',handle:'@Malys520572',url:'https://x.com/Malys520572',icon_key:'x',sort_order:2},
-      {id:'ss3',name:'Reddit',handle:'u/Electrical_Funny6177',url:'https://reddit.com/u/Electrical_Funny6177',icon_key:'reddit',sort_order:3}
-    ];
-    const S_ENTRIES=[
-      {id:'se3',entry_date:'March 14, 2026',title:'lesson day',content:'<p>how many lessons can you get through? be sure to use potions if you have the gems! don\'t forget about the other usefull tools at your disposal like embers, potions, quests and more!</p><p>talk to boots if needed! he can be rather helpful if you talk through your problem with him!</p><p>go back and review your previous couple lessons or maybe even chapters! especially if you had an extended session previously</p>',published:true},
-      {id:'se2',entry_date:'March 13, 2026',title:'veg day',content:'<p>just a day to sit back and breath. lay back, get comfy and poke around in the tools you\'re learning or go browse some youtube / twitch / whatever tickles your fancy. or maybe you\'ve been putting off a project around the house, gaming? nows the day</p><p>what i got up to today: explored github some more. all commits updating the site today done from github, without AI. just the keyboard and a little mouse action here and there thought about getting back into boot.dev but just need to let my brain settle. watched some youtube. answered a q wrong on x shoulda been pwd - print working directory shows absolute path ended up doing a couple/few lessons</p><p>fairly light easy day, weather coulda beem nicer, plans for tomorrow? hmm.</p>',published:true},
-      {id:'se1',entry_date:'March 12, 2026',title:'the post that started this',content:'<p>I wrote a long post on r/learnprogramming. Put real thought into it \u2014 where I\'m at, what I\'m struggling with, honest questions about balancing learning with building, time management, and how an introvert starts connecting with other people in tech. The mods removed it before anyone could even read it.</p><p>And you know what? No ill will. The sub has rules and I probably should\'ve read the FAQ more carefully. But it did help me realize something: I need my own space. Somewhere my thoughts can exist without getting caught in someone else\'s filter.</p><p>So here we are. This site is that space. It started as frustration but turned into something I\'m actually excited about. Just writing that reddit post \u2014 even though nobody saw it \u2014 helped me organize my thoughts. Turns out writing things down is weirdly therapeutic. Who knew.</p><p>I\'m about a month into learning to code. Started by installing linux on an old alienware laptop. Put my first repo on github yesterday \u2014 an i3 keybinding cheatsheet and editor. It\'s small but it\'s real and it\'s mine. Every new thing I learn opens another door and then I\'m down the next rabbithole. Can\'t stop won\'t stop... until I crash. Then repeat.</p><p>I know I need to slow down. I know I rely on AI too much. I know I should talk to actual humans more. I\'m working on all of it. But at least now I have somewhere to write about the process while I figure it out.</p><p>Gonna keep on keepin\' on, I suppose.</p>',published:true}
-    ];
+    const S_BELIEFS=[{id:'sb1',title:'learn by building, not just consuming',content:'Grinding through lessons has its place, but the real learning happens when you make something, break it, and figure out why. My first repo is small and kinda rough but it taught me more than any tutorial.',sort_order:1},{id:'sb2',title:'ship it, even if it\'s embarrassing',content:'Perfectionism is the enemy. Put it out there. You can\'t get feedback on code that lives only on your machine. The act of making something public changes how you think about it.',sort_order:2},{id:'sb3',title:'slow down to go faster',content:'The can\'t-stop-won\'t-stop mindset is fun until you crash. Sustainable pace beats heroic sprints. 37signals runs on 40-hour weeks and they\'ve been profitable for 25 years. There\'s something to that.',sort_order:3},{id:'sb4',title:'own your space',content:'This site exists because a reddit post got deleted before anyone could see it. That\'s fine. But it\'s a reminder: if you want a voice that can\'t be moderated away, you need your own corner of the internet.',sort_order:4},{id:'sb5',title:'ai is a tool, not a crutch',content:'I use AI. I\'m not going to pretend I don\'t. But the goal is to understand what the code does, not just to generate it. The basics matter. You can\'t debug what you don\'t understand.',sort_order:5},{id:'sb6',title:'keep going, keep writing',content:'Writing things out organizes thoughts better than any productivity system. This whole site started because I realized journaling helps me process what I\'m learning. So here we are.',sort_order:6},{id:'sb7',title:'sleep on it. seriously. just do it.',content:'instant gratification is great and all but isn\'t gonna be sustainable, start planning a little more thoroughly, don\'t get stagnant though.',sort_order:7}];
+    const S_TILES=[{id:'st1',title:'System',content:'<p>D.E.\'s: Cosmic and i3 till im happy with the i3 config things to fix in i3:</p><p>- some apps not working properly or as expected</p><p>ex. - mission control opens to blank/translucent window</p><p>- garuda toolbox can\'t run certain diags or sys update</p><p>general: lockscreen needs theme still</p>',published:true,sort_order:1},{id:'st2',title:'Lessons',content:'<p>- Onward from ch3 at last! got to ch5 l2</p>',published:true,sort_order:2},{id:'st3',title:'This Site',content:'<p>- tweak "hero"</p>',published:true,sort_order:3},{id:'st4',title:'Keybindings Cheatsheet / Editor',content:'<p>undecided where i want to go with it rn, seems to be functioning as expected.</p><p>gonna try to learn how exactly it works before going too much farther.</p>',published:true,sort_order:4}];
+    const S_PROJECTS=[{id:'sp1',title:'i3 Keybinding Cheatsheet & Editor',tags:'Python, Web UI, i3wm',description:'My first repo. Parses an i3 config file and serves a local web UI for viewing and editing keybindings. Nothing huge, almost kinda embarrassing, but it felt good to put something real out on the internet. And I learned a ton building it.',link_url:'https://github.com/Malys-Botware/i3-keybindings-cheatsheet',link_text:'view on github \u2192',sort_order:1},{id:'sp2',title:'This Website',tags:'HTML, CSS, JS, Supabase',description:'A single-file personal site built to be readable, learnable, and easy to modify. No frameworks. No build steps. Just a text editor and a browser. An ongoing project to learn web development while having something to show for it.',link_url:'https://github.com/Malys-Botware/Malys-Botware.github.io',link_text:'view source \u2192',sort_order:2}];
+    const S_SOCIALS=[{id:'ss1',name:'GitHub',handle:'Malys-Botware',url:'https://github.com/Malys-Botware',icon_key:'github',sort_order:1},{id:'ss2',name:'X',handle:'@Malys520572',url:'https://x.com/Malys520572',icon_key:'x',sort_order:2},{id:'ss3',name:'Reddit',handle:'u/Electrical_Funny6177',url:'https://reddit.com/u/Electrical_Funny6177',icon_key:'reddit',sort_order:3}];
+    const S_ENTRIES=[{id:'se3',entry_date:'March 14, 2026',title:'lesson day',content:'<p>how many lessons can you get through? be sure to use potions if you have the gems! don\'t forget about the other usefull tools at your disposal like embers, potions, quests and more!</p><p>talk to boots if needed! he can be rather helpful if you talk through your problem with him!</p><p>go back and review your previous couple lessons or maybe even chapters! especially if you had an extended session previously</p>',published:true},{id:'se2',entry_date:'March 13, 2026',title:'veg day',content:'<p>just a day to sit back and breath. lay back, get comfy and poke around in the tools you\'re learning or go browse some youtube / twitch / whatever tickles your fancy. or maybe you\'ve been putting off a project around the house, gaming? nows the day</p><p>what i got up to today: explored github some more. all commits updating the site today done from github, without AI. just the keyboard and a little mouse action here and there thought about getting back into boot.dev but just need to let my brain settle. watched some youtube. answered a q wrong on x shoulda been pwd - print working directory shows absolute path ended up doing a couple/few lessons</p><p>fairly light easy day, weather coulda beem nicer, plans for tomorrow? hmm.</p>',published:true},{id:'se1',entry_date:'March 12, 2026',title:'the post that started this',content:'<p>I wrote a long post on r/learnprogramming. Put real thought into it \u2014 where I\'m at, what I\'m struggling with, honest questions about balancing learning with building, time management, and how an introvert starts connecting with other people in tech. The mods removed it before anyone could even read it.</p><p>And you know what? No ill will. The sub has rules and I probably should\'ve read the FAQ more carefully. But it did help me realize something: I need my own space. Somewhere my thoughts can exist without getting caught in someone else\'s filter.</p><p>So here we are. This site is that space. It started as frustration but turned into something I\'m actually excited about. Just writing that reddit post \u2014 even though nobody saw it \u2014 helped me organize my thoughts. Turns out writing things down is weirdly therapeutic. Who knew.</p><p>I\'m about a month into learning to code. Started by installing linux on an old alienware laptop. Put my first repo on github yesterday \u2014 an i3 keybinding cheatsheet and editor. It\'s small but it\'s real and it\'s mine. Every new thing I learn opens another door and then I\'m down the next rabbithole. Can\'t stop won\'t stop... until I crash. Then repeat.</p><p>I know I need to slow down. I know I rely on AI too much. I know I should talk to actual humans more. I\'m working on all of it. But at least now I have somewhere to write about the process while I figure it out.</p><p>Gonna keep on keepin\' on, I suppose.</p>',published:true}];
 
     /* HELPERS */
     function esc(s){var d=document.createElement('div');d.textContent=s;return d.innerHTML}
@@ -349,7 +420,14 @@
       try{var r=await supabaseClient.auth.signInWithPassword({email:email,password:pw});if(r.error)throw r.error;currentUser=r.data.user;closeModal('loginModal');document.getElementById('loginEmail').value='';document.getElementById('loginPassword').value='';updateUI();loadAll();showToast('Logged in')}
       catch(e){showErr('loginError',e.message||'Login failed.')}
     }
-    async function handleLogout(){if(!supabaseClient)return;await supabaseClient.auth.signOut();currentUser=null;updateUI();loadAll();showToast('Logged out')}
+    async function handleLogout(){
+      if(!supabaseClient)return;
+      await supabaseClient.auth.signOut();
+      currentUser=null;
+      /* Exit blur mode on logout so public view renders correctly */
+      blurModeActive=false;
+      updateUI();loadAll();showToast('Logged out');
+    }
     async function checkSession(){if(!supabaseClient)return;try{var s=await supabaseClient.auth.getSession();if(s.data.session){currentUser=s.data.session.user;updateUI()}}catch(e){}}
     document.getElementById('loginPassword').addEventListener('keydown',function(e){if(e.key==='Enter')handleLogin()});
 
@@ -359,6 +437,130 @@
       document.getElementById('editAboutBtn').classList.toggle('visible',admin);
       document.getElementById('adminLoginLink').style.display=admin?'none':'inline-flex';
       document.getElementById('adminLogoutLink').style.display=admin?'inline-flex':'none';
+      /* Blur mode toggle — only visible when logged in */
+      document.getElementById('blurModeToggle').style.display=admin?'inline-flex':'none';
+      if(!admin){
+        blurModeActive=false;
+        document.getElementById('blurModeToggle').classList.remove('active');
+        removeAllBlurToggles();
+      }
+      applyBlurState();
+    }
+
+    /* 
+      ============================================================
+      BLUR / PRIVACY FUNCTIONS
+      ============================================================
+    */
+
+    /* Load blur settings from Supabase site_settings table */
+    async function loadBlurSettings(){
+      if(!supabaseClient) return;
+      try{
+        var r=await supabaseClient.from('site_settings').select('value').eq('key','blurred_sections').single();
+        /* PGRST116 = no rows found, that's fine — means nothing blurred yet */
+        if(r.error&&r.error.code!=='PGRST116') throw r.error;
+        if(r.data&&r.data.value){
+          blurredSections=new Set(JSON.parse(r.data.value));
+        }
+      }catch(e){
+        blurredSections=new Set();
+      }
+      applyBlurState();
+    }
+
+    /* Save blur state to Supabase (called after every toggle) */
+    async function saveBlurSettings(){
+      if(!supabaseClient||!currentUser) return;
+      try{
+        await supabaseClient.from('site_settings').upsert(
+          {key:'blurred_sections',value:JSON.stringify(Array.from(blurredSections)),user_id:currentUser.id},
+          {onConflict:'key'}
+        );
+      }catch(e){showToast('Failed to save blur settings')}
+    }
+
+    /* 
+      Apply blur classes to all blurrable sections.
+      - Public (not logged in) + blurred → frosted blur overlay
+      - Admin (logged in) + blurred → red border indicator, content visible
+      - Not blurred → clean, no classes
+    */
+    function applyBlurState(){
+      BLURRABLE_SECTIONS.forEach(function(id){
+        var sec=document.getElementById(id);
+        if(!sec) return;
+        var hidden=blurredSections.has(id);
+        if(hidden&&!currentUser){
+          sec.classList.add('section-blurred');
+          sec.classList.remove('section-blurred-admin');
+        }else if(hidden&&currentUser){
+          sec.classList.remove('section-blurred');
+          sec.classList.add('section-blurred-admin');
+        }else{
+          sec.classList.remove('section-blurred','section-blurred-admin');
+        }
+      });
+      /* Refresh toggle button states if blur mode is open */
+      if(blurModeActive) renderBlurToggles();
+    }
+
+    /* Enter/exit blur mode (admin only) */
+    function toggleBlurMode(){
+      blurModeActive=!blurModeActive;
+      document.getElementById('blurModeToggle').classList.toggle('active',blurModeActive);
+      if(blurModeActive){
+        renderBlurToggles();
+        showToast('Blur mode \u2014 click eye on each section to toggle');
+      }else{
+        removeAllBlurToggles();
+        showToast('Blur mode off');
+      }
+    }
+
+    /* 
+      Create or update the per-section eye toggle buttons.
+      Each blurrable section gets a small button in its top-right corner
+      showing "visible" (eye open) or "hidden" (eye with slash).
+    */
+    function renderBlurToggles(){
+      BLURRABLE_SECTIONS.forEach(function(id){
+        var sec=document.getElementById(id);
+        if(!sec) return;
+        var btn=sec.querySelector('.section-blur-toggle');
+        if(!btn){
+          btn=document.createElement('button');
+          btn.className='section-blur-toggle';
+          btn.setAttribute('data-section',id);
+          btn.addEventListener('click',function(){toggleSectionBlur(id)});
+          sec.appendChild(btn);
+        }
+        var hidden=blurredSections.has(id);
+        btn.classList.toggle('is-hidden',hidden);
+        /* Eye-slash for hidden, open eye for visible */
+        btn.innerHTML=hidden
+          ?'<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg> hidden'
+          :'<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg> visible';
+        btn.style.display='inline-flex';
+      });
+    }
+
+    /* Hide all per-section toggle buttons (when exiting blur mode) */
+    function removeAllBlurToggles(){
+      document.querySelectorAll('.section-blur-toggle').forEach(function(el){el.style.display='none'});
+    }
+
+    /* Toggle one section between visible/hidden and save immediately */
+    async function toggleSectionBlur(id){
+      if(blurredSections.has(id)){
+        blurredSections.delete(id);
+        showToast(id+' now visible to public');
+      }else{
+        blurredSections.add(id);
+        showToast(id+' hidden from public');
+      }
+      applyBlurState();
+      await saveBlurSettings();
     }
 
     /* SITE SETTINGS (hero, about, footer) */
@@ -401,193 +603,44 @@
     }
 
     /* BELIEFS */
-    async function loadBeliefs(){
-      var c=document.getElementById('beliefsList');
-      if(!supabaseClient){renderBeliefs(S_BELIEFS);return}
-      try{var r=await supabaseClient.from('beliefs').select('*').order('sort_order',{ascending:true});if(r.error)throw r.error;renderBeliefs(r.data&&r.data.length?r.data:[])}
-      catch(e){renderBeliefs(S_BELIEFS)}
-    }
-    function renderBeliefs(items){
-      var c=document.getElementById('beliefsList');c.innerHTML='';
-      items.forEach(function(b){
-        var d=document.createElement('div');d.className='belief reveal visible';
-        var ctrls=currentUser?'<div class="item-controls visible"><button class="btn btn-small" onclick="openBeliefEditor(\''+b.id+'\')">edit</button><button class="btn btn-small btn-danger" onclick="deleteBelief(\''+b.id+'\')">delete</button></div>':'';
-        d.innerHTML='<h3>'+esc(b.title)+'</h3><p>'+esc(b.content)+'</p>'+ctrls;
-        c.appendChild(d);
-      });
-    }
-    function openBeliefEditor(id){
-      editingId=id||null;editingType='belief';
-      document.getElementById('beliefEditorTitle').textContent=id?'Edit Belief':'New Belief';
-      document.getElementById('beliefEditorSaveBtn').textContent=id?'Save Changes':'Save';
-      if(id){loadItemForEditing('beliefs',id,function(d){document.getElementById('beliefTitle').value=d.title;document.getElementById('beliefContent').value=d.content})}
-      else{document.getElementById('beliefTitle').value='';document.getElementById('beliefContent').value=''}
-      openModal('beliefEditorModal');document.getElementById('beliefTitle').focus();
-    }
-    async function saveBelief(){
-      var title=document.getElementById('beliefTitle').value.trim(),content=document.getElementById('beliefContent').value.trim();
-      if(!title||!content){showErr('beliefEditorError','Title and description required.');return}
-      try{
-        if(editingId){var r=await supabaseClient.from('beliefs').update({title:title,content:content}).eq('id',editingId);if(r.error)throw r.error;showToast('Belief updated')}
-        else{var ex=await supabaseClient.from('beliefs').select('sort_order').order('sort_order',{ascending:false}).limit(1);var n=(ex.data&&ex.data.length)?ex.data[0].sort_order+1:1;var r=await supabaseClient.from('beliefs').insert({title:title,content:content,sort_order:n,user_id:currentUser.id});if(r.error)throw r.error;showToast('Belief added')}
-        closeModal('beliefEditorModal');loadBeliefs();
-      }catch(e){showErr('beliefEditorError',e.message||'Failed to save')}
-    }
+    async function loadBeliefs(){var c=document.getElementById('beliefsList');if(!supabaseClient){renderBeliefs(S_BELIEFS);return}try{var r=await supabaseClient.from('beliefs').select('*').order('sort_order',{ascending:true});if(r.error)throw r.error;renderBeliefs(r.data&&r.data.length?r.data:[])}catch(e){renderBeliefs(S_BELIEFS)}}
+    function renderBeliefs(items){var c=document.getElementById('beliefsList');c.innerHTML='';items.forEach(function(b){var d=document.createElement('div');d.className='belief reveal visible';var ctrls=currentUser?'<div class="item-controls visible"><button class="btn btn-small" onclick="openBeliefEditor(\''+b.id+'\')">edit</button><button class="btn btn-small btn-danger" onclick="deleteBelief(\''+b.id+'\')">delete</button></div>':'';d.innerHTML='<h3>'+esc(b.title)+'</h3><p>'+esc(b.content)+'</p>'+ctrls;c.appendChild(d)})}
+    function openBeliefEditor(id){editingId=id||null;editingType='belief';document.getElementById('beliefEditorTitle').textContent=id?'Edit Belief':'New Belief';document.getElementById('beliefEditorSaveBtn').textContent=id?'Save Changes':'Save';if(id){loadItemForEditing('beliefs',id,function(d){document.getElementById('beliefTitle').value=d.title;document.getElementById('beliefContent').value=d.content})}else{document.getElementById('beliefTitle').value='';document.getElementById('beliefContent').value=''}openModal('beliefEditorModal');document.getElementById('beliefTitle').focus()}
+    async function saveBelief(){var title=document.getElementById('beliefTitle').value.trim(),content=document.getElementById('beliefContent').value.trim();if(!title||!content){showErr('beliefEditorError','Title and description required.');return}try{if(editingId){var r=await supabaseClient.from('beliefs').update({title:title,content:content}).eq('id',editingId);if(r.error)throw r.error;showToast('Belief updated')}else{var ex=await supabaseClient.from('beliefs').select('sort_order').order('sort_order',{ascending:false}).limit(1);var n=(ex.data&&ex.data.length)?ex.data[0].sort_order+1:1;var r=await supabaseClient.from('beliefs').insert({title:title,content:content,sort_order:n,user_id:currentUser.id});if(r.error)throw r.error;showToast('Belief added')}closeModal('beliefEditorModal');loadBeliefs()}catch(e){showErr('beliefEditorError',e.message||'Failed to save')}}
     async function deleteBelief(id){if(!confirm('Delete this belief?'))return;try{var r=await supabaseClient.from('beliefs').delete().eq('id',id);if(r.error)throw r.error;showToast('Deleted');loadBeliefs()}catch(e){showToast('Failed')}}
 
     /* DASHBOARD TILES */
-    async function loadTiles(){
-      var c=document.getElementById('dashboardTiles');
-      if(!supabaseClient){renderTiles(S_TILES);return}
-      c.innerHTML='<div class="section-loading">loading...</div>';
-      try{var q=supabaseClient.from('dashboard_tiles').select('*').order('sort_order',{ascending:true});if(!currentUser)q=q.eq('published',true);var r=await q;if(r.error)throw r.error;renderTiles(r.data&&r.data.length?r.data:[])}
-      catch(e){renderTiles(S_TILES)}
-    }
-    function renderTiles(tiles){
-      var c=document.getElementById('dashboardTiles');c.innerHTML='';
-      if(!tiles.length){c.innerHTML='<p style="color:var(--white-dim);font-size:0.85rem">no tiles yet.</p>';return}
-      tiles.forEach(function(t){
-        var d=document.createElement('div');d.className='now-card reveal visible';
-        var badge=(!t.published&&currentUser)?'<span class="draft-badge">draft</span>':'';
-        var ctrls=currentUser?'<div class="item-controls visible"><button class="btn btn-small '+(t.published?'':'btn-green')+'" onclick="toggleTilePub(\''+t.id+'\','+!t.published+')">'+(t.published?'unpublish':'publish')+'</button><button class="btn btn-small" onclick="openTileEditor(\''+t.id+'\')">edit</button><button class="btn btn-small btn-danger" onclick="deleteTile(\''+t.id+'\')">delete</button></div>':'';
-        d.innerHTML='<h3>'+esc(t.title)+badge+'</h3><div class="rich-content">'+renderContent(t.content)+'</div>'+ctrls;
-        c.appendChild(d);
-      });
-    }
-    function openTileEditor(id){
-      editingId=id||null;editingType='tile';
-      document.getElementById('tileEditorTitle').textContent=id?'Edit Tile':'New Tile';
-      document.getElementById('tileEditorSaveBtn').textContent=id?'Save Changes':'Save Draft';
-      if(id){loadItemForEditing('dashboard_tiles',id,function(d){document.getElementById('tileTitle').value=d.title;tileQuill.root.innerHTML=renderContent(d.content)})}
-      else{document.getElementById('tileTitle').value='';tileQuill.root.innerHTML=''}
-      openModal('tileEditorModal');document.getElementById('tileTitle').focus();
-    }
-    async function saveTile(){
-      var title=document.getElementById('tileTitle').value.trim(),content=tileQuill.root.innerHTML.trim();
-      if(!title||!content||content==='<p><br></p>'){showErr('tileEditorError','Title and content required.');return}
-      try{
-        if(editingId){var r=await supabaseClient.from('dashboard_tiles').update({title:title,content:content,updated_at:new Date().toISOString()}).eq('id',editingId);if(r.error)throw r.error;showToast('Tile updated')}
-        else{var ex=await supabaseClient.from('dashboard_tiles').select('sort_order').order('sort_order',{ascending:false}).limit(1);var n=(ex.data&&ex.data.length)?ex.data[0].sort_order+1:1;var r=await supabaseClient.from('dashboard_tiles').insert({title:title,content:content,sort_order:n,published:false,user_id:currentUser.id});if(r.error)throw r.error;showToast('Draft saved')}
-        closeModal('tileEditorModal');loadTiles();
-      }catch(e){showErr('tileEditorError',e.message||'Failed to save')}
-    }
+    async function loadTiles(){var c=document.getElementById('dashboardTiles');if(!supabaseClient){renderTiles(S_TILES);return}c.innerHTML='<div class="section-loading">loading...</div>';try{var q=supabaseClient.from('dashboard_tiles').select('*').order('sort_order',{ascending:true});if(!currentUser)q=q.eq('published',true);var r=await q;if(r.error)throw r.error;renderTiles(r.data&&r.data.length?r.data:[])}catch(e){renderTiles(S_TILES)}}
+    function renderTiles(tiles){var c=document.getElementById('dashboardTiles');c.innerHTML='';if(!tiles.length){c.innerHTML='<p style="color:var(--white-dim);font-size:0.85rem">no tiles yet.</p>';return}tiles.forEach(function(t){var d=document.createElement('div');d.className='now-card reveal visible';var badge=(!t.published&&currentUser)?'<span class="draft-badge">draft</span>':'';var ctrls=currentUser?'<div class="item-controls visible"><button class="btn btn-small '+(t.published?'':'btn-green')+'" onclick="toggleTilePub(\''+t.id+'\','+!t.published+')">'+(t.published?'unpublish':'publish')+'</button><button class="btn btn-small" onclick="openTileEditor(\''+t.id+'\')">edit</button><button class="btn btn-small btn-danger" onclick="deleteTile(\''+t.id+'\')">delete</button></div>':'';d.innerHTML='<h3>'+esc(t.title)+badge+'</h3><div class="rich-content">'+renderContent(t.content)+'</div>'+ctrls;c.appendChild(d)})}
+    function openTileEditor(id){editingId=id||null;editingType='tile';document.getElementById('tileEditorTitle').textContent=id?'Edit Tile':'New Tile';document.getElementById('tileEditorSaveBtn').textContent=id?'Save Changes':'Save Draft';if(id){loadItemForEditing('dashboard_tiles',id,function(d){document.getElementById('tileTitle').value=d.title;tileQuill.root.innerHTML=renderContent(d.content)})}else{document.getElementById('tileTitle').value='';tileQuill.root.innerHTML=''}openModal('tileEditorModal');document.getElementById('tileTitle').focus()}
+    async function saveTile(){var title=document.getElementById('tileTitle').value.trim(),content=tileQuill.root.innerHTML.trim();if(!title||!content||content==='<p><br></p>'){showErr('tileEditorError','Title and content required.');return}try{if(editingId){var r=await supabaseClient.from('dashboard_tiles').update({title:title,content:content,updated_at:new Date().toISOString()}).eq('id',editingId);if(r.error)throw r.error;showToast('Tile updated')}else{var ex=await supabaseClient.from('dashboard_tiles').select('sort_order').order('sort_order',{ascending:false}).limit(1);var n=(ex.data&&ex.data.length)?ex.data[0].sort_order+1:1;var r=await supabaseClient.from('dashboard_tiles').insert({title:title,content:content,sort_order:n,published:false,user_id:currentUser.id});if(r.error)throw r.error;showToast('Draft saved')}closeModal('tileEditorModal');loadTiles()}catch(e){showErr('tileEditorError',e.message||'Failed to save')}}
     async function toggleTilePub(id,s){try{var r=await supabaseClient.from('dashboard_tiles').update({published:s}).eq('id',id);if(r.error)throw r.error;showToast(s?'Published':'Unpublished');loadTiles()}catch(e){showToast('Failed')}}
     async function deleteTile(id){if(!confirm('Delete this tile?'))return;try{var r=await supabaseClient.from('dashboard_tiles').delete().eq('id',id);if(r.error)throw r.error;showToast('Deleted');loadTiles()}catch(e){showToast('Failed')}}
 
     /* PROJECTS */
-    async function loadProjects(){
-      var c=document.getElementById('projectsList');
-      if(!supabaseClient){renderProjects(S_PROJECTS);return}
-      try{var r=await supabaseClient.from('projects').select('*').order('sort_order',{ascending:true});if(r.error)throw r.error;renderProjects(r.data&&r.data.length?r.data:[])}
-      catch(e){renderProjects(S_PROJECTS)}
-    }
-    function renderProjects(items){
-      var c=document.getElementById('projectsList');c.innerHTML='';
-      items.forEach(function(p){
-        var d=document.createElement('div');d.className='project-card reveal visible';
-        var tags=p.tags.split(',').map(function(t){return'<span class="tag">'+esc(t.trim())+'</span>'}).join('');
-        var ctrls=currentUser?'<div class="item-controls visible" style="margin-top:var(--space-md)"><button class="btn btn-small" onclick="openProjectEditor(\''+p.id+'\')">edit</button><button class="btn btn-small btn-danger" onclick="deleteProject(\''+p.id+'\')">delete</button></div>':'';
-        d.innerHTML='<div class="project-header"><h3>'+esc(p.title)+'</h3><div class="project-tags">'+tags+'</div></div><p>'+esc(p.description)+'</p><a href="'+esc(p.link_url)+'" class="project-link" target="_blank" rel="noopener">'+esc(p.link_text)+'</a>'+ctrls;
-        c.appendChild(d);
-      });
-    }
-    function openProjectEditor(id){
-      editingId=id||null;editingType='project';
-      document.getElementById('projectEditorTitle').textContent=id?'Edit Project':'New Project';
-      document.getElementById('projectEditorSaveBtn').textContent=id?'Save Changes':'Save';
-      if(id){loadItemForEditing('projects',id,function(d){document.getElementById('projectTitle').value=d.title;document.getElementById('projectTags').value=d.tags;document.getElementById('projectDesc').value=d.description;document.getElementById('projectUrl').value=d.link_url;document.getElementById('projectLinkText').value=d.link_text})}
-      else{document.getElementById('projectTitle').value='';document.getElementById('projectTags').value='';document.getElementById('projectDesc').value='';document.getElementById('projectUrl').value='';document.getElementById('projectLinkText').value='view on github \u2192'}
-      openModal('projectEditorModal');document.getElementById('projectTitle').focus();
-    }
-    async function saveProject(){
-      var title=document.getElementById('projectTitle').value.trim(),tags=document.getElementById('projectTags').value.trim(),desc=document.getElementById('projectDesc').value.trim(),url=document.getElementById('projectUrl').value.trim(),lt=document.getElementById('projectLinkText').value.trim();
-      if(!title||!desc){showErr('projectEditorError','Title and description required.');return}
-      try{
-        if(editingId){var r=await supabaseClient.from('projects').update({title:title,tags:tags,description:desc,link_url:url,link_text:lt}).eq('id',editingId);if(r.error)throw r.error;showToast('Project updated')}
-        else{var ex=await supabaseClient.from('projects').select('sort_order').order('sort_order',{ascending:false}).limit(1);var n=(ex.data&&ex.data.length)?ex.data[0].sort_order+1:1;var r=await supabaseClient.from('projects').insert({title:title,tags:tags,description:desc,link_url:url,link_text:lt,sort_order:n,user_id:currentUser.id});if(r.error)throw r.error;showToast('Project added')}
-        closeModal('projectEditorModal');loadProjects();
-      }catch(e){showErr('projectEditorError',e.message||'Failed to save')}
-    }
+    async function loadProjects(){var c=document.getElementById('projectsList');if(!supabaseClient){renderProjects(S_PROJECTS);return}try{var r=await supabaseClient.from('projects').select('*').order('sort_order',{ascending:true});if(r.error)throw r.error;renderProjects(r.data&&r.data.length?r.data:[])}catch(e){renderProjects(S_PROJECTS)}}
+    function renderProjects(items){var c=document.getElementById('projectsList');c.innerHTML='';items.forEach(function(p){var d=document.createElement('div');d.className='project-card reveal visible';var tags=p.tags.split(',').map(function(t){return'<span class="tag">'+esc(t.trim())+'</span>'}).join('');var ctrls=currentUser?'<div class="item-controls visible" style="margin-top:var(--space-md)"><button class="btn btn-small" onclick="openProjectEditor(\''+p.id+'\')">edit</button><button class="btn btn-small btn-danger" onclick="deleteProject(\''+p.id+'\')">delete</button></div>':'';d.innerHTML='<div class="project-header"><h3>'+esc(p.title)+'</h3><div class="project-tags">'+tags+'</div></div><p>'+esc(p.description)+'</p><a href="'+esc(p.link_url)+'" class="project-link" target="_blank" rel="noopener">'+esc(p.link_text)+'</a>'+ctrls;c.appendChild(d)})}
+    function openProjectEditor(id){editingId=id||null;editingType='project';document.getElementById('projectEditorTitle').textContent=id?'Edit Project':'New Project';document.getElementById('projectEditorSaveBtn').textContent=id?'Save Changes':'Save';if(id){loadItemForEditing('projects',id,function(d){document.getElementById('projectTitle').value=d.title;document.getElementById('projectTags').value=d.tags;document.getElementById('projectDesc').value=d.description;document.getElementById('projectUrl').value=d.link_url;document.getElementById('projectLinkText').value=d.link_text})}else{document.getElementById('projectTitle').value='';document.getElementById('projectTags').value='';document.getElementById('projectDesc').value='';document.getElementById('projectUrl').value='';document.getElementById('projectLinkText').value='view on github \u2192'}openModal('projectEditorModal');document.getElementById('projectTitle').focus()}
+    async function saveProject(){var title=document.getElementById('projectTitle').value.trim(),tags=document.getElementById('projectTags').value.trim(),desc=document.getElementById('projectDesc').value.trim(),url=document.getElementById('projectUrl').value.trim(),lt=document.getElementById('projectLinkText').value.trim();if(!title||!desc){showErr('projectEditorError','Title and description required.');return}try{if(editingId){var r=await supabaseClient.from('projects').update({title:title,tags:tags,description:desc,link_url:url,link_text:lt}).eq('id',editingId);if(r.error)throw r.error;showToast('Project updated')}else{var ex=await supabaseClient.from('projects').select('sort_order').order('sort_order',{ascending:false}).limit(1);var n=(ex.data&&ex.data.length)?ex.data[0].sort_order+1:1;var r=await supabaseClient.from('projects').insert({title:title,tags:tags,description:desc,link_url:url,link_text:lt,sort_order:n,user_id:currentUser.id});if(r.error)throw r.error;showToast('Project added')}closeModal('projectEditorModal');loadProjects()}catch(e){showErr('projectEditorError',e.message||'Failed to save')}}
     async function deleteProject(id){if(!confirm('Delete this project?'))return;try{var r=await supabaseClient.from('projects').delete().eq('id',id);if(r.error)throw r.error;showToast('Deleted');loadProjects()}catch(e){showToast('Failed')}}
 
     /* JOURNAL ENTRIES */
-    async function loadEntries(){
-      var c=document.getElementById('journalEntries');
-      if(!supabaseClient){renderEntries(S_ENTRIES);return}
-      c.innerHTML='<div class="section-loading">loading...</div>';
-      try{var q=supabaseClient.from('journal_entries').select('*').order('created_at',{ascending:false});if(!currentUser)q=q.eq('published',true);var r=await q;if(r.error)throw r.error;renderEntries(r.data&&r.data.length?r.data:[])}
-      catch(e){renderEntries(S_ENTRIES)}
-    }
-    function renderEntries(entries){
-      var c=document.getElementById('journalEntries');c.innerHTML='';
-      if(!entries.length){c.innerHTML='<p style="color:var(--white-dim);font-size:0.85rem">no entries yet.</p>';return}
-      entries.forEach(function(e){
-        var a=document.createElement('article');a.className='journal-entry reveal visible';
-        var badge=(!e.published&&currentUser)?'<span class="draft-badge">draft</span>':'';
-        var ctrls=currentUser?'<div class="entry-controls visible"><button class="btn btn-small '+(e.published?'':'btn-green')+'" onclick="toggleEntryPub(\''+e.id+'\','+!e.published+')">'+(e.published?'unpublish':'publish')+'</button><button class="btn btn-small" onclick="openEntryEditor(\''+e.id+'\')">edit</button><button class="btn btn-small btn-danger" onclick="deleteEntry(\''+e.id+'\')">delete</button><span class="control-spacer"></span><div class="share-group"><span class="share-label">share:</span><button class="btn btn-small" onclick="shareToX(\''+escA(e.title)+'\')">X</button><button class="btn btn-small" onclick="shareToReddit(\''+escA(e.title)+'\')">Reddit</button><button class="btn btn-small" onclick="copyLink()">Link</button></div></div>':'';
-        a.innerHTML='<div class="entry-date">'+esc(e.entry_date)+badge+'</div><h3>'+esc(e.title)+'</h3><div class="rich-content">'+renderContent(e.content)+'</div>'+ctrls;
-        c.appendChild(a);
-      });
-    }
-    function openEntryEditor(id){
-      editingId=id||null;editingType='entry';
-      document.getElementById('entryEditorTitle').textContent=id?'Edit Entry':'New Entry';
-      document.getElementById('entryEditorSaveBtn').textContent=id?'Save Changes':'Save Draft';
-      if(id){loadItemForEditing('journal_entries',id,function(d){document.getElementById('entryTitle').value=d.title;document.getElementById('entryDate').value=d.entry_date;entryQuill.root.innerHTML=renderContent(d.content)})}
-      else{document.getElementById('entryTitle').value='';document.getElementById('entryDate').value=new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});entryQuill.root.innerHTML=''}
-      openModal('entryEditorModal');document.getElementById('entryTitle').focus();
-    }
-    async function saveEntry(){
-      var title=document.getElementById('entryTitle').value.trim(),date=document.getElementById('entryDate').value.trim(),content=entryQuill.root.innerHTML.trim();
-      if(!title||!date||!content||content==='<p><br></p>'){showErr('entryEditorError','All fields required.');return}
-      try{
-        if(editingId){var r=await supabaseClient.from('journal_entries').update({title:title,entry_date:date,content:content,updated_at:new Date().toISOString()}).eq('id',editingId);if(r.error)throw r.error;showToast('Entry updated')}
-        else{var r=await supabaseClient.from('journal_entries').insert({title:title,entry_date:date,content:content,published:false,user_id:currentUser.id});if(r.error)throw r.error;showToast('Draft saved')}
-        closeModal('entryEditorModal');loadEntries();
-      }catch(e){showErr('entryEditorError',e.message||'Failed to save')}
-    }
+    async function loadEntries(){var c=document.getElementById('journalEntries');if(!supabaseClient){renderEntries(S_ENTRIES);return}c.innerHTML='<div class="section-loading">loading...</div>';try{var q=supabaseClient.from('journal_entries').select('*').order('created_at',{ascending:false});if(!currentUser)q=q.eq('published',true);var r=await q;if(r.error)throw r.error;renderEntries(r.data&&r.data.length?r.data:[])}catch(e){renderEntries(S_ENTRIES)}}
+    function renderEntries(entries){var c=document.getElementById('journalEntries');c.innerHTML='';if(!entries.length){c.innerHTML='<p style="color:var(--white-dim);font-size:0.85rem">no entries yet.</p>';return}entries.forEach(function(e){var a=document.createElement('article');a.className='journal-entry reveal visible';var badge=(!e.published&&currentUser)?'<span class="draft-badge">draft</span>':'';var ctrls=currentUser?'<div class="entry-controls visible"><button class="btn btn-small '+(e.published?'':'btn-green')+'" onclick="toggleEntryPub(\''+e.id+'\','+!e.published+')">'+(e.published?'unpublish':'publish')+'</button><button class="btn btn-small" onclick="openEntryEditor(\''+e.id+'\')">edit</button><button class="btn btn-small btn-danger" onclick="deleteEntry(\''+e.id+'\')">delete</button><span class="control-spacer"></span><div class="share-group"><span class="share-label">share:</span><button class="btn btn-small" onclick="shareToX(\''+escA(e.title)+'\')">X</button><button class="btn btn-small" onclick="shareToReddit(\''+escA(e.title)+'\')">Reddit</button><button class="btn btn-small" onclick="copyLink()">Link</button></div></div>':'';a.innerHTML='<div class="entry-date">'+esc(e.entry_date)+badge+'</div><h3>'+esc(e.title)+'</h3><div class="rich-content">'+renderContent(e.content)+'</div>'+ctrls;c.appendChild(a)})}
+    function openEntryEditor(id){editingId=id||null;editingType='entry';document.getElementById('entryEditorTitle').textContent=id?'Edit Entry':'New Entry';document.getElementById('entryEditorSaveBtn').textContent=id?'Save Changes':'Save Draft';if(id){loadItemForEditing('journal_entries',id,function(d){document.getElementById('entryTitle').value=d.title;document.getElementById('entryDate').value=d.entry_date;entryQuill.root.innerHTML=renderContent(d.content)})}else{document.getElementById('entryTitle').value='';document.getElementById('entryDate').value=new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});entryQuill.root.innerHTML=''}openModal('entryEditorModal');document.getElementById('entryTitle').focus()}
+    async function saveEntry(){var title=document.getElementById('entryTitle').value.trim(),date=document.getElementById('entryDate').value.trim(),content=entryQuill.root.innerHTML.trim();if(!title||!date||!content||content==='<p><br></p>'){showErr('entryEditorError','All fields required.');return}try{if(editingId){var r=await supabaseClient.from('journal_entries').update({title:title,entry_date:date,content:content,updated_at:new Date().toISOString()}).eq('id',editingId);if(r.error)throw r.error;showToast('Entry updated')}else{var r=await supabaseClient.from('journal_entries').insert({title:title,entry_date:date,content:content,published:false,user_id:currentUser.id});if(r.error)throw r.error;showToast('Draft saved')}closeModal('entryEditorModal');loadEntries()}catch(e){showErr('entryEditorError',e.message||'Failed to save')}}
     async function toggleEntryPub(id,s){try{var r=await supabaseClient.from('journal_entries').update({published:s,updated_at:new Date().toISOString()}).eq('id',id);if(r.error)throw r.error;showToast(s?'Published':'Unpublished');loadEntries()}catch(e){showToast('Failed')}}
     async function deleteEntry(id){if(!confirm('Delete this entry?'))return;try{var r=await supabaseClient.from('journal_entries').delete().eq('id',id);if(r.error)throw r.error;showToast('Deleted');loadEntries()}catch(e){showToast('Failed')}}
 
     /* SOCIAL LINKS */
-    async function loadSocials(){
-      if(!supabaseClient){renderSocials(S_SOCIALS);return}
-      try{var r=await supabaseClient.from('social_links').select('*').order('sort_order',{ascending:true});if(r.error)throw r.error;renderSocials(r.data&&r.data.length?r.data:[])}
-      catch(e){renderSocials(S_SOCIALS)}
-    }
-    function renderSocials(items){
-      var c=document.getElementById('socialLinksList');c.innerHTML='';
-      items.forEach(function(s){
-        var d=document.createElement('a');d.href=s.url;d.className='social-link reveal visible';d.target='_blank';d.rel='noopener';
-        var ctrls=currentUser?'<div class="item-controls visible" style="width:100%;margin-top:var(--space-sm);border-top:1px solid var(--gray);padding-top:var(--space-sm)"><button class="btn btn-small" onclick="event.preventDefault();openSocialEditor(\''+s.id+'\')">edit</button><button class="btn btn-small btn-danger" onclick="event.preventDefault();deleteSocial(\''+s.id+'\')">delete</button></div>':'';
-        d.innerHTML='<div class="social-icon">'+iconSvg(s.icon_key)+'</div><div class="social-info"><div class="social-name">'+esc(s.name)+'</div><div class="social-handle">'+esc(s.handle)+'</div></div><span class="social-arrow">\u2192</span>'+ctrls;
-        c.appendChild(d);
-      });
-    }
-    function openSocialEditor(id){
-      editingId=id||null;editingType='social';
-      document.getElementById('socialEditorTitle').textContent=id?'Edit Social Link':'New Social Link';
-      document.getElementById('socialEditorSaveBtn').textContent=id?'Save Changes':'Save';
-      if(id){loadItemForEditing('social_links',id,function(d){document.getElementById('socialIcon').value=d.icon_key;document.getElementById('socialName').value=d.name;document.getElementById('socialHandle').value=d.handle;document.getElementById('socialUrl').value=d.url})}
-      else{document.getElementById('socialIcon').value='github';document.getElementById('socialName').value='';document.getElementById('socialHandle').value='';document.getElementById('socialUrl').value=''}
-      openModal('socialEditorModal');
-    }
-    async function saveSocial(){
-      var icon=document.getElementById('socialIcon').value,name=document.getElementById('socialName').value.trim(),handle=document.getElementById('socialHandle').value.trim(),url=document.getElementById('socialUrl').value.trim();
-      if(!name||!url){showErr('socialEditorError','Name and URL required.');return}
-      try{
-        if(editingId){var r=await supabaseClient.from('social_links').update({icon_key:icon,name:name,handle:handle,url:url}).eq('id',editingId);if(r.error)throw r.error;showToast('Link updated')}
-        else{var ex=await supabaseClient.from('social_links').select('sort_order').order('sort_order',{ascending:false}).limit(1);var n=(ex.data&&ex.data.length)?ex.data[0].sort_order+1:1;var r=await supabaseClient.from('social_links').insert({icon_key:icon,name:name,handle:handle,url:url,sort_order:n,user_id:currentUser.id});if(r.error)throw r.error;showToast('Link added')}
-        closeModal('socialEditorModal');loadSocials();
-      }catch(e){showErr('socialEditorError',e.message||'Failed to save')}
-    }
+    async function loadSocials(){if(!supabaseClient){renderSocials(S_SOCIALS);return}try{var r=await supabaseClient.from('social_links').select('*').order('sort_order',{ascending:true});if(r.error)throw r.error;renderSocials(r.data&&r.data.length?r.data:[])}catch(e){renderSocials(S_SOCIALS)}}
+    function renderSocials(items){var c=document.getElementById('socialLinksList');c.innerHTML='';items.forEach(function(s){var d=document.createElement('a');d.href=s.url;d.className='social-link reveal visible';d.target='_blank';d.rel='noopener';var ctrls=currentUser?'<div class="item-controls visible" style="width:100%;margin-top:var(--space-sm);border-top:1px solid var(--gray);padding-top:var(--space-sm)"><button class="btn btn-small" onclick="event.preventDefault();openSocialEditor(\''+s.id+'\')">edit</button><button class="btn btn-small btn-danger" onclick="event.preventDefault();deleteSocial(\''+s.id+'\')">delete</button></div>':'';d.innerHTML='<div class="social-icon">'+iconSvg(s.icon_key)+'</div><div class="social-info"><div class="social-name">'+esc(s.name)+'</div><div class="social-handle">'+esc(s.handle)+'</div></div><span class="social-arrow">\u2192</span>'+ctrls;c.appendChild(d)})}
+    function openSocialEditor(id){editingId=id||null;editingType='social';document.getElementById('socialEditorTitle').textContent=id?'Edit Social Link':'New Social Link';document.getElementById('socialEditorSaveBtn').textContent=id?'Save Changes':'Save';if(id){loadItemForEditing('social_links',id,function(d){document.getElementById('socialIcon').value=d.icon_key;document.getElementById('socialName').value=d.name;document.getElementById('socialHandle').value=d.handle;document.getElementById('socialUrl').value=d.url})}else{document.getElementById('socialIcon').value='github';document.getElementById('socialName').value='';document.getElementById('socialHandle').value='';document.getElementById('socialUrl').value=''}openModal('socialEditorModal')}
+    async function saveSocial(){var icon=document.getElementById('socialIcon').value,name=document.getElementById('socialName').value.trim(),handle=document.getElementById('socialHandle').value.trim(),url=document.getElementById('socialUrl').value.trim();if(!name||!url){showErr('socialEditorError','Name and URL required.');return}try{if(editingId){var r=await supabaseClient.from('social_links').update({icon_key:icon,name:name,handle:handle,url:url}).eq('id',editingId);if(r.error)throw r.error;showToast('Link updated')}else{var ex=await supabaseClient.from('social_links').select('sort_order').order('sort_order',{ascending:false}).limit(1);var n=(ex.data&&ex.data.length)?ex.data[0].sort_order+1:1;var r=await supabaseClient.from('social_links').insert({icon_key:icon,name:name,handle:handle,url:url,sort_order:n,user_id:currentUser.id});if(r.error)throw r.error;showToast('Link added')}closeModal('socialEditorModal');loadSocials()}catch(e){showErr('socialEditorError',e.message||'Failed to save')}}
     async function deleteSocial(id){if(!confirm('Delete this link?'))return;try{var r=await supabaseClient.from('social_links').delete().eq('id',id);if(r.error)throw r.error;showToast('Deleted');loadSocials()}catch(e){showToast('Failed')}}
 
     /* GENERIC LOAD FOR EDITING */
-    async function loadItemForEditing(table,id,cb){
-      try{var r=await supabaseClient.from(table).select('*').eq('id',id).single();if(r.error)throw r.error;cb(r.data)}
-      catch(e){showToast('Failed to load');closeModal(document.querySelector('.modal-overlay.visible').id)}
-    }
+    async function loadItemForEditing(table,id,cb){try{var r=await supabaseClient.from(table).select('*').eq('id',id).single();if(r.error)throw r.error;cb(r.data)}catch(e){showToast('Failed to load');closeModal(document.querySelector('.modal-overlay.visible').id)}}
 
     /* SHARE */
     function shareToX(t){window.open('https://x.com/intent/tweet?text='+encodeURIComponent(t+' \u2014 '+SITE_URL+'#journal'),'_blank','noopener,width=550,height=420')}
@@ -601,11 +654,12 @@
     window.addEventListener('scroll',function(){var cur='';secs.forEach(function(s){if(window.scrollY>=s.offsetTop-100)cur=s.getAttribute('id')});nls.forEach(function(l){l.classList.remove('active');if(l.getAttribute('href')==='#'+cur)l.classList.add('active')})});
     document.querySelectorAll('.nav-links a').forEach(function(l){l.addEventListener('click',function(){document.querySelector('.nav-links').classList.remove('open')})});
 
-    /* LOAD ALL */
-    function loadAll(){loadSettings();loadBeliefs();loadTiles();loadProjects();loadEntries();loadSocials()}
+    /* LOAD ALL — blur settings loaded alongside everything else */
+    function loadAll(){loadSettings();loadBeliefs();loadTiles();loadProjects();loadEntries();loadSocials();loadBlurSettings()}
 
     /* INIT */
     (async function(){await checkSession();loadAll()})();
   </script>
 </body>
 </html>
+
