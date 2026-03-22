@@ -56,6 +56,11 @@
     .rich-content code{background:var(--black);padding:2px 4px;font-size:0.8rem}
     .rich-content ul,.rich-content ol{padding-left:24px;margin:8px 0}
     .rich-content a{color:var(--red)}
+    .rich-content img{max-width:100%;height:auto;border:1px solid var(--gray);border-radius:4px;margin:8px 0;display:block}
+    .ql-editor img{max-width:100%;height:auto;border:1px solid var(--gray);border-radius:4px;margin:8px 0;cursor:pointer}
+    .img-toolbar{position:absolute;display:flex;gap:4px;background:var(--black-card);border:1px solid var(--red-dim);padding:4px;z-index:210;box-shadow:0 4px 16px rgba(0,0,0,0.6)}
+    .img-toolbar button{font-family:var(--font-heading);font-size:0.55rem;letter-spacing:1px;text-transform:uppercase;border:1px solid var(--gray);background:var(--black);color:var(--white-dim);padding:4px 8px;cursor:pointer}
+    .img-toolbar button:active{border-color:var(--red);color:var(--red)}
     .card-date{font-size:0.65rem;letter-spacing:2px;text-transform:uppercase;color:var(--red);margin-bottom:4px}
     .card-title{font-family:var(--font-heading);font-size:0.95rem;font-weight:700;color:var(--white);margin-bottom:8px;line-height:1.4}
     .card-actions{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap}
@@ -571,9 +576,97 @@ function showSub(name,evt){
 /* ============================================================
    QUILL EDITOR INSTANCE
    ============================================================ */
-const qCfg={theme:'snow',modules:{toolbar:[[{header:[1,2,3,false]}],['bold','italic','underline','strike'],[{list:'ordered'},{list:'bullet'}],['blockquote','code-block'],['link'],['clean']]}};
+const qCfg={theme:'snow',modules:{toolbar:[[{header:[1,2,3,false]}],['bold','italic','underline','strike'],[{list:'ordered'},{list:'bullet'}],['blockquote','code-block'],['link','image'],['clean']]}};
 let editorQuill=null;
-function initQuill(){if(!editorQuill)editorQuill=new Quill('#editorQuill',{...qCfg,placeholder:'write here...'})}
+function initQuill(){
+  if(editorQuill)return;
+  editorQuill=new Quill('#editorQuill',{...qCfg,placeholder:'write here...'});
+  /* Override image handler — opens camera/gallery, resizes, inserts as base64 */
+  editorQuill.getModule('toolbar').addHandler('image',function(){
+    var input=document.createElement('input');
+    input.type='file';input.accept='image/*';
+    /* On mobile, accept="image/*" without capture gives choice of camera or gallery */
+    input.onchange=function(){
+      var file=input.files[0];if(!file)return;
+      resizeImage(file,1200,0.7,function(dataUrl){
+        var range=editorQuill.getSelection(true);
+        editorQuill.insertEmbed(range.index,'image',dataUrl);
+        editorQuill.setSelection(range.index+1);
+      });
+    };
+    input.click();
+  });
+}
+/* Resize image to max dimension, compress. Keeps PNG for transparency. */
+function resizeImage(file,maxDim,quality,cb){
+  var isPng=file.type==='image/png';
+  var reader=new FileReader();
+  reader.onload=function(){
+    var img=new Image();
+    img.onload=function(){
+      var w=img.width,h=img.height;
+      if(w>maxDim||h>maxDim){
+        if(w>h){h=Math.round(h*(maxDim/w));w=maxDim}
+        else{w=Math.round(w*(maxDim/h));h=maxDim}
+      }
+      var canvas=document.createElement('canvas');
+      canvas.width=w;canvas.height=h;
+      var ctx=canvas.getContext('2d');
+      ctx.drawImage(img,0,0,w,h);
+      cb(isPng?canvas.toDataURL('image/png'):canvas.toDataURL('image/jpeg',quality));
+    };
+    img.src=reader.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+/* Image tap toolbar — tap image in editor to move/delete */
+var activeImgToolbar=null;
+function removeImgToolbar(){if(activeImgToolbar){activeImgToolbar.remove();activeImgToolbar=null}}
+document.addEventListener('click',function(e){
+  /* If clicking inside an existing toolbar, don't remove it */
+  if(activeImgToolbar&&activeImgToolbar.contains(e.target))return;
+  removeImgToolbar();
+  /* Check if we clicked an image inside the Quill editor */
+  var img=e.target;
+  if(img.tagName!=='IMG')return;
+  var editor=img.closest('.ql-editor');
+  if(!editor)return;
+  e.preventDefault();e.stopPropagation();
+  /* Build toolbar */
+  var tb=document.createElement('div');
+  tb.className='img-toolbar';
+  var btnUp=document.createElement('button');btnUp.textContent='↑ move up';
+  var btnDown=document.createElement('button');btnDown.textContent='↓ move down';
+  var btnDel=document.createElement('button');btnDel.textContent='✕ delete';btnDel.style.color='var(--red)';
+  btnUp.onclick=function(ev){ev.stopPropagation();moveImg(img,editor,-1)};
+  btnDown.onclick=function(ev){ev.stopPropagation();moveImg(img,editor,1)};
+  btnDel.onclick=function(ev){ev.stopPropagation();img.remove();removeImgToolbar()};
+  tb.appendChild(btnUp);tb.appendChild(btnDown);tb.appendChild(btnDel);
+  /* Position near the image */
+  var wrap=editor.closest('.quill-wrap')||editor.parentElement;
+  wrap.style.position='relative';
+  var imgRect=img.getBoundingClientRect();
+  var wrapRect=wrap.getBoundingClientRect();
+  var topPos=imgRect.top-wrapRect.top-30;
+  if(topPos<0)topPos=imgRect.bottom-wrapRect.top+4;
+  tb.style.top=topPos+'px';
+  tb.style.left=Math.max(0,imgRect.left-wrapRect.left)+'px';
+  wrap.appendChild(tb);
+  activeImgToolbar=tb;
+},true);
+function moveImg(img,editor,dir){
+  /* Find the block-level parent of the image (usually a <p>) */
+  var block=img.parentElement;
+  while(block&&block!==editor&&block.parentElement!==editor)block=block.parentElement;
+  if(!block||block===editor)return;
+  if(dir===-1&&block.previousElementSibling){
+    editor.insertBefore(block,block.previousElementSibling);
+  }else if(dir===1&&block.nextElementSibling){
+    editor.insertBefore(block.nextElementSibling,block);
+  }
+  removeImgToolbar();
+}
 
 /* ============================================================
    GENERIC EDITOR SYSTEM
@@ -646,7 +739,7 @@ function openEditor(type,id){
   openModal('editorModal');
 }
 
-function closeEditor(){closeModal('editorModal');editType=null;editId=null}
+function closeEditor(){closeModal('editorModal');editType=null;editId=null;removeImgToolbar()}
 function gf(id){return document.getElementById(id)}
 function mkField(id,label,val){return'<label for="'+id+'">'+label+'</label><input type="text" id="'+id+'" value="'+esc(val)+'">' }
 function mkTextarea(id,label,val){return'<label for="'+id+'">'+label+'</label><textarea id="'+id+'">'+esc(val)+'</textarea>'}
