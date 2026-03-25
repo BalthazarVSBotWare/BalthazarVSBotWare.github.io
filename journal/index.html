@@ -6,7 +6,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="theme-color" content="#0a0a0a">
-  <title>Malys Journal</title>
+  <title>Bal's Builders Journal</title>
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -660,7 +660,7 @@
   </div>
   <div class="setting-group">
     <h3>About</h3>
-    <p style="font-size:0.8rem;color:var(--white-dim)">MalysVSBotWare™ Journal — personal PWA. All data stored locally on this device via IndexedDB. Nothing leaves your phone.</p>
+    <p style="font-size:0.8rem;color:var(--white-dim)">Bal's Builders Journal — personal PWA. All data stored locally on this device via IndexedDB. Nothing leaves your phone.</p>
     <p style="font-size:0.75rem;color:var(--red);margin-top:10px;padding:8px;border:1px solid var(--red-dim);background:rgba(153,17,17,0.1)">⚠ Warning: Clearing your browser's "site data" or "all data" will permanently delete everything in this app. Only clear "cached images and files" if needed — that's safe. Export your data regularly as a backup.</p>
   </div>
 </div>
@@ -1163,7 +1163,7 @@ function openEditor(type,id){
     if(id)dbGet('socials',id).then(d=>{if(d){gf('socIcon').value=d.icon_key;gf('socName').value=d.name;gf('socHandle').value=d.handle;gf('socUrl').value=d.url}});
   }else if(type==='hero'){
     title.textContent='Edit Hero';
-    getSetting('hero_name','malys').then(n=>{
+    getSetting('hero_name','balthazar').then(n=>{
       getSetting('hero_tagline','').then(tl=>{
         getSetting('hero_status','').then(st=>{
           fields.innerHTML=mkField('heroName','Name',n)+mkTextarea('heroTagline','Tagline',tl)+mkField('heroStatus','Status',st);
@@ -1338,7 +1338,7 @@ function buildMascotSvg(cfg){
 }
 
 async function loadHero(){
-  const name=await getSetting('hero_name','malys');
+  const name=await getSetting('hero_name','balthazar');
   const tagline=await getSetting('hero_tagline','your personal space');
   const status=await getSetting('hero_status','offline');
   document.getElementById('heroInfo').innerHTML='<h1>hey, i\'m <span class="red">'+esc(name)+'</span></h1><p class="tagline">'+esc(tagline)+'</p><span class="status">'+esc(status)+'</span>';
@@ -1350,7 +1350,7 @@ async function loadHero(){
 }
 async function loadAbout(){const v=await getSetting('about_intro','');document.getElementById('aboutText').innerHTML=v?textToHtml(v):'<p class="empty-msg">no about text yet.</p>'}
 async function loadFooter(){
-  const l1=await getSetting('footer_line1','MalysVSBotWare\u2122 — built by thought');
+  const l1=await getSetting('footer_line1','Bal\'s Builders Journal — built by thought');
   const l2=await getSetting('footer_line2','keep on keepin\' on.');
   document.getElementById('footerPreview').innerHTML='<p>'+esc(l1)+'</p><p style="margin-top:4px">'+esc(l2)+'</p>';
 }
@@ -1691,7 +1691,7 @@ async function exportData(){
   data._app_only={images:await dbGetAll('images')};
   var blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
   var url=URL.createObjectURL(blob);var a=document.createElement('a');
-  a.href=url;a.download='malys-journal-'+new Date().toISOString().slice(0,10)+'.json';
+  a.href=url;a.download='bals-builders-journal-'+new Date().toISOString().slice(0,10)+'.json';
   a.click();URL.revokeObjectURL(url);showToast('Data exported');
 }
 async function importData(e){
@@ -2574,7 +2574,7 @@ function profileInit(){
 
 function showProfilePicker(){
   var profiles=getProfiles();
-  var html='<div class="lock-title">MalysVSBotWare\u2122</div>';
+  var html='<div class="lock-title">Bal\'s Builders Journal</div>';
   html+='<div class="lock-subtitle">choose profile</div>';
   html+='<div class="profile-grid">';
   profiles.forEach(function(p,i){
@@ -2831,7 +2831,7 @@ async function migrateExistingToProfile(){
       if(hasData){
         /* Create a default profile that uses the old DB name */
         var id='legacy';
-        profiles.push({id:id,name:'Malys',pin:'0000',pinLen:4});
+        profiles.push({id:id,name:'Balthazar',pin:'0000',pinLen:4});
         saveProfiles(profiles);
         setLastProfileId(id);
         /* Rename: we can't rename IndexedDB, so legacy profile just uses 'malys_journal_legacy' 
